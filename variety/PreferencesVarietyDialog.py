@@ -48,6 +48,9 @@ from variety_lib.varietyconfig import get_data_file
 random.seed()
 logger = logging.getLogger("variety")
 
+SLIDESHOW_PAGE_INDEX = 4
+DONATE_PAGE_INDEX = 10
+
 
 class PreferencesVarietyDialog(PreferencesDialog):
     __gtype_name__ = "PreferencesVarietyDialog"
@@ -80,7 +83,7 @@ class PreferencesVarietyDialog(PreferencesDialog):
         )
 
         if not Util.check_variety_slideshow_present():
-            self.ui.notebook.remove_page(2)
+            self.ui.notebook.remove_page(SLIDESHOW_PAGE_INDEX)
 
         profile_suffix = (
             "" if is_default_profile() else _(" (Profile: {})").format(get_profile_short_name())
@@ -136,6 +139,11 @@ class PreferencesVarietyDialog(PreferencesDialog):
             self.ui.internet_enabled.set_active(self.options.internet_enabled)
 
             self.fav_chooser.set_folder(os.path.expanduser(self.options.favorites_folder))
+            self.ui.wallpaper_auto_rotate.set_active(self.options.wallpaper_auto_rotate)
+            self.ui.wallpaper_display_mode.remove_all()
+            for mode in self.parent.get_display_modes():
+                self.ui.wallpaper_display_mode.append(mode.id, mode.title)
+            self.ui.wallpaper_display_mode.set_active_id(self.options.wallpaper_display_mode)
 
             self.fetched_chooser.set_folder(os.path.expanduser(self.options.fetched_folder))
             self.ui.clipboard_enabled.set_active(self.options.clipboard_enabled)
@@ -347,6 +355,7 @@ class PreferencesVarietyDialog(PreferencesDialog):
             self.on_quotes_change_enabled_toggled()
             self.on_icon_changed()
             self.on_favorites_operations_changed()
+            self.on_wallpaper_display_mode_changed()
             self.update_clipboard_state()
             self.update_status_message()
         finally:
@@ -839,7 +848,6 @@ class PreferencesVarietyDialog(PreferencesDialog):
 
             images = []
             folders = []
-            image_count = 0
 
             for row in source_rows:
                 if not row:
@@ -847,46 +855,35 @@ class PreferencesVarietyDialog(PreferencesDialog):
 
                 type = row[1]
                 if type == Options.SourceType.IMAGE:
-                    image_count += 1
                     images.append(row[2])
                 else:
                     folder = self.parent.get_folder_of_source(self.model_row_to_source(row))
-                    image_count += sum(
-                        1
-                        for f in Util.list_files(
-                            folders=(folder,),
-                            filter_func=Util.is_image,
-                            max_files=1,
-                            randomize=False,
-                        )
-                    )
                     folders.append(folder)
 
-            if image_count > -1:
-                folder_images = list(
-                    Util.list_files(folders=folders, filter_func=Util.is_image, max_files=1000)
-                )
-                if len(source_rows) == 1 and source_rows[0][1] == Options.SourceType.ALBUM_FILENAME:
-                    folder_images = sorted(folder_images)
-                elif len(source_rows) == 1 and source_rows[0][1] == Options.SourceType.ALBUM_DATE:
-                    folder_images = sorted(folder_images, key=os.path.getmtime)
-                else:
-                    random.shuffle(folder_images)
-                to_show = images + folder_images
-                if hasattr(self, "focused_image") and self.focused_image is not None:
-                    try:
-                        to_show.remove(self.focused_image)
-                    except Exception:
-                        pass
-                    to_show.insert(0, self.focused_image)
-                    self.focused_image = None
-                self.parent.thumbs_manager.show(
-                    to_show, screen=self.get_screen(), folders=folders, type=thumbs_type
-                )
-                if pin:
-                    self.parent.thumbs_manager.pin()
-                if thumbs_type:
-                    self.parent.update_indicator(auto_changed=False)
+            folder_images = list(
+                Util.list_files(folders=folders, filter_func=Util.is_image, max_files=10000)
+            )
+            if len(source_rows) == 1 and source_rows[0][1] == Options.SourceType.ALBUM_FILENAME:
+                folder_images = sorted(folder_images)
+            elif len(source_rows) == 1 and source_rows[0][1] == Options.SourceType.ALBUM_DATE:
+                folder_images = sorted(folder_images, key=os.path.getmtime)
+            else:
+                random.shuffle(folder_images)
+            to_show = images + folder_images
+            if hasattr(self, "focused_image") and self.focused_image is not None:
+                try:
+                    to_show.remove(self.focused_image)
+                except Exception:
+                    pass
+                to_show.insert(0, self.focused_image)
+                self.focused_image = None
+            self.parent.thumbs_manager.show(
+                to_show, screen=self.get_screen(), folders=folders, type=thumbs_type
+            )
+            if pin:
+                self.parent.thumbs_manager.pin()
+            if thumbs_type:
+                self.parent.update_indicator(auto_changed=False)
 
         except Exception:
             logger.exception(lambda: "Could not create thumbs window:")
@@ -901,6 +898,17 @@ class PreferencesVarietyDialog(PreferencesDialog):
             dialog = AddConfigurableDialog()
         dialog.set_source(source)
         self.show_dialog(dialog)
+
+    def on_wallpaper_display_mode_changed(self, *args):
+        modes = [
+            m
+            for m in self.parent.get_display_modes()
+            if m.id == self.ui.wallpaper_display_mode.get_active_id()
+        ]
+        if modes:
+            self.ui.wallpaper_mode_description.set_text(modes[0].description)
+        else:
+            self.ui.wallpaper_mode_description.set_text("")
 
     def show_dialog(self, dialog):
         self.dialog = dialog
@@ -970,6 +978,9 @@ class PreferencesVarietyDialog(PreferencesDialog):
                 self.options.sources.append(self.model_row_to_source(r))
             for s in self.unsupported_sources:
                 self.options.sources.append(s)
+
+            self.options.wallpaper_auto_rotate = self.ui.wallpaper_auto_rotate.get_active()
+            self.options.wallpaper_display_mode = self.ui.wallpaper_display_mode.get_active_id()
 
             if os.access(self.fetched_chooser.get_folder(), os.W_OK):
                 self.options.fetched_folder = self.fetched_chooser.get_folder()
