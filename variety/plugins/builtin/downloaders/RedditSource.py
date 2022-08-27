@@ -16,7 +16,7 @@
 
 import logging
 import random
-
+import gtk
 from variety.plugins.builtin.downloaders.RedditDownloader import RedditDownloader
 from variety.plugins.downloaders.ConfigurableImageSource import ConfigurableImageSource
 from variety.Util import _
@@ -60,6 +60,33 @@ class RedditSource(ConfigurableImageSource):
 
     def get_ui_short_description(self):
         return _("Fetch images from a given subreddit or user")
+
+    # create a PyGTK checkbox that allows the user to select whether or not to use a proxy. Write the checkbox value to a boolean variable.
+    def create_proxy_checkbox(self, vbox):
+        self.use_proxy = gtk.CheckButton(_("Use proxy"))
+        vbox.pack_start(self.use_proxy, False, False, 0)
+        self.use_proxy.show()
+        #if the user has previously selected to use a proxy, set the checkbox to True. If not, set it to False. Default to False.
+        self.use_proxy.set_active(self.config.get("use_proxy", False))
+        if self.config.get("use_proxy", False):
+            self.use_proxy.set_active(True)
+        else:
+            self.use_proxy.set_active(False)
+        #If the user selects to use a proxy, spawn a PyGTK dropdown for proxy type and an entry field for the instance URL.
+        if self.use_proxy.get_active():
+            self.proxy_type = gtk.combo_box_new_text()
+            self.proxy_type.append_text("Teddit")
+            self.proxy_type.append_text("Libreddit")
+            self.proxy_type.set_active(self.config.get("proxy_type", 0))
+            vbox.pack_start(self.proxy_type, False, False, 0)
+            self.proxy_type.show()
+            self.proxy_url = gtk.Entry()
+            self.proxy_url.set_text(self.config.get("proxy_url", "Instance URL..."))
+            vbox.pack_start(self.proxy_url, False, False, 0)
+            self.proxy_url.show()
+        else:
+            self.proxy_type = None
+            self.proxy_url = None
 
     def validate(self, query):
         logger.info(lambda: "Validating Reddit query " + query)
